@@ -25,13 +25,15 @@ This repository installs Hex and that transformation, then wires the step into
 
 ## Run
 
+Run it from a reviewed local clone. Do not pipe the script from the `main` branch:
+that content can change after it was reviewed.
+
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/mathruffian-dot/hex-zh-hant/main/install-windows.ps1 -OutFile i.ps1; ./i.ps1"
+powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
 ```
 
-Or, from a clone: `powershell -ExecutionPolicy Bypass -File .\install-windows.ps1`
-
-Useful switches: `-SkipHotkey`, `-ConfigureOnly`, `-Hotkey caps-lock`.
+Useful switches: `-SkipHotkey`, `-ConfigureOnly`, `-Hotkey caps-lock`,
+`-AllowUnreviewedInstaller` (only after reading the changed vendor installer).
 
 With no path to `install-windows.ps1` (offline agent), do the four "Manual steps"
 in `README.md` instead.
@@ -40,10 +42,11 @@ in `README.md` instead.
 
 | Path | Change |
 |---|---|
-| `%APPDATA%\hex\` | Hex install (official installer; verifies size + SHA-256 + Authenticode) |
+| `%APPDATA%\hex\` | Hex install (official installer, pinned by SHA-256, stable channel; it verifies size + SHA-256, and this script then requires a valid Authenticode signature from Anomaly Innovations, Inc) |
 | `%USERPROFILE%\.config\hex\` | `hex.config.ts` + 3 transformer `.ts` files, `hex.d.ts`, `tsconfig.json` (via `hex commands init`) |
-| `%APPDATA%\hex\settings.json` | `dictation_processing.default_mode.transformations` gains `s2twp`; `ui_language = zh-Hant`; `dictation_hotkey` (unless `-SkipHotkey`) |
-| `%APPDATA%\hex\settings.json.bak-<timestamp>` | Backup written before the edit |
+| Hex settings, via `hex settings apply` | `dictation_processing.default_mode.transformations` gains `s2twp`; `ui_language = zh-Hant`; `dictation_hotkey` (unless `-SkipHotkey`). Values already in place are not written again |
+| `%APPDATA%\hex\settings.json.bak-<timestamp>` | Backup written before a change, when settings.json exists |
+| `%USERPROFILE%\.config\hex\hex.config.ts.bak-<timestamp>` | A pre-existing `hex.config.ts` that differed |
 | HKCU user `PATH` | Hex's own installer appends `%APPDATA%\hex\bin` |
 
 It does **not** touch other apps' config, the registry beyond Hex's own keys, or
@@ -71,13 +74,14 @@ is the proof the transformation ran.
 
 ## Guardrails
 
-- **Never edit `settings.json` while Hex is running.** Hex rewrites it on exit and
-  the edit is lost. Quit first (`hex quit`), wait ~2 s, then edit.
+- **Do not edit `settings.json` by hand.** Hex rewrites it on exit and the edit is
+  lost. Use `hex settings set` / `hex settings apply <file>`; `apply` takes nested
+  JSON values such as `dictation_processing.default_mode`.
 - **Do not use the Output pane's "Try" field to verify.** Its preview only applies
   *built-in* steps (`lowercase`, …); script transformations run only on a real
   dictation.
-- **Do not report success from the script's exit code alone.** Require the three
-  checks above.
+- **The script exits non-zero when one of the checks above fails.** The dictation
+  test below is still needed: only a real dictation proves the step runs.
 - **Per-mode steps are independent.** If the user creates an app-specific mode, it
   needs `s2twp` added separately.
 - **Live text previews stay Simplified.** The step is post-processing; only the
@@ -90,11 +94,13 @@ is the proof the transformation ran.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `hex commands check` prints "no hex.config.ts or hex.config.js" | workspace missing / wrong dir | `hex commands init`, then re-copy the 4 `.ts` files |
-| `unknown setting` from `hex settings set` | nested keys are not settable | edit `settings.json` with Hex closed |
+| `unknown setting` from `hex settings set` | `set` takes whole keys from `hex settings list` | put the JSON value in a file and use `hex settings apply <file>` |
 | Pane shows "還沒有步驟" after install | Hex cached settings before the edit | `hex restart` |
 | Output still Simplified | step missing, or a different app mode is active | check `dictation_processing.default_mode` / the mode's own `transformations` |
 | Hotkey does nothing | `Ctrl+Space` grabbed by the Chinese IME | `hex settings set dictation_hotkey control+option+space` |
 | Hex reports version/binary mismatch on install | a running Hex held the old binary | quit Hex, re-run the installer |
+| "vendor installer changed since it was reviewed" | Anomaly updated `install-windows.ps1` | read the new script, then re-run with `-AllowUnreviewedInstaller` |
+| "does not match its pinned SHA-256" | a transformer file was edited, or checked out with CRLF | restore the file from git (`.gitattributes` keeps LF) |
 
 ## Attribution
 

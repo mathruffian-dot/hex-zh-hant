@@ -11,9 +11,13 @@
 
 ## 給 Agent 的指令（先讀 `AGENTS.md`）
 
+從已檢視過的本機 clone 執行，不要直接抓 `main` 分支的腳本來跑（分支內容隨時可能改變）：
+
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/mathruffian-dot/hex-zh-hant/main/install-windows.ps1 -OutFile i.ps1; ./i.ps1"
+powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
 ```
+
+腳本自己會驗證下面三個條件，任何一項不成立就以非零結束碼結束。
 
 驗證成功的三個條件：
 
@@ -24,10 +28,7 @@ powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.c
 ## 給人的安裝方式
 
 ```powershell
-# 方法一：一行（腳本會自行下載轉換器）
-powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/mathruffian-dot/hex-zh-hant/main/install-windows.ps1 -OutFile i.ps1; ./i.ps1"
-
-# 方法二：clone 後執行
+# clone 後執行（轉換器檔案會以內建的 SHA-256 核對）
 git clone https://github.com/mathruffian-dot/hex-zh-hant
 cd hex-zh-hant
 powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
@@ -39,18 +40,20 @@ powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
 |---|---|
 | `-Hotkey control+option+space` | 聽寫快捷鍵（預設 `Ctrl+Alt+Space`） |
 | `-SkipHotkey` | 不動你現有的快捷鍵 |
-| `-ConfigureOnly` | 只改設定，不啟動／不安裝 Hex |
+| `-ConfigureOnly` | 不安裝、不啟動 Hex，也不動介面語言與快捷鍵；只放轉換器並加入 `s2twp` |
+| `-AllowUnreviewedInstaller` | 官方安裝腳本的 SHA-256 與檢視過的版本不同時仍然執行（請先自己讀過新版） |
 
 ## 腳本做了什麼
 
 | 步驟 | 內容 |
 |---|---|
-| 1 | 若 `%APPDATA%\hex\bin\hex.com` 不存在，執行官方 `install-windows.ps1`（會驗證檔案大小、SHA-256 與 Authenticode 簽章） |
-| 2 | 啟動再關閉 Hex，讓它把 `settings.json` 寫完整 |
-| 3 | `hex commands init` 建立 `~/.config/hex`，放入 OpenCC `s2tw`／`s2twp` 轉換器 |
-| 4 | **關閉 Hex 後**改 `settings.json`，把 `s2twp` 加進「每次聽寫」的步驟（Hex 執行中會覆寫設定，必須先關） |
-| 5 | 重新啟動 Hex，設定 `ui_language = zh-Hant` 與避開注音衝突的快捷鍵 |
-| 6 | 印出驗證結果 |
+| 1 | 若 `%APPDATA%\hex\bin\hex.com` 不存在，下載官方 `install-windows.ps1`，核對它的 SHA-256 與檢視過的版本一致，強制使用 stable 頻道後執行（官方腳本只驗證檔案大小與 SHA-256） |
+| 2 | 檢查 `hex.exe`／`hex.com` 的 Authenticode 簽章必須有效且簽署者為 Anomaly Innovations, Inc，否則不啟動 |
+| 3 | `hex commands init` 建立 `~/.config/hex`，放入 OpenCC `s2tw`／`s2twp` 轉換器（4 個檔案逐一核對 SHA-256；原本就有的 `hex.config.ts` 會先備份） |
+| 4 | 用 Hex 自己的 `hex settings apply` 一次寫入：「每次聽寫」加上 `s2twp`、`ui_language = zh-Hant`、避開注音衝突的快捷鍵。由 Hex 驗證、全有或全無，不手改 `settings.json`，也不必關閉 Hex |
+| 5 | 驗證結果；任何一項不符就回傳非零結束碼 |
+
+重複執行是安全的：已經是目標值的設定不會再寫入。
 
 ## 為什麼預設熱鍵是 Ctrl+Alt+Space
 
@@ -88,7 +91,7 @@ hex history --raw --limit 1               # raw_text 是簡體，final_text 應�
 ## 手動步驟（不想跑腳本）
 
 ```powershell
-# 1. 安裝 Hex（官方）
+# 1. 安裝 Hex（官方；裝完可用 Get-AuthenticodeSignature 檢查 %APPDATA%\hex\bin\hex.com 的簽章）
 powershell -ExecutionPolicy Bypass -Command "iwr https://anoma.ly/hex/install-windows.ps1 -OutFile i.ps1; ./i.ps1"
 
 # 2. 建立轉換器工作區
@@ -98,11 +101,9 @@ hex commands init
 #    hex.config.ts, hex-s2tw.ts, hex-data-st.ts, hex-data-tw.ts
 hex commands check
 
-# 4. 完全關閉 Hex（工作列圖示 → Quit），再編輯
-#    %APPDATA%\hex\settings.json
-#    dictation_processing.default_mode.transformations 加入 "s2twp"
-
-# 5. 重開 Hex
+# 4. 在 Hex 視窗的 Output 窗格把「簡轉繁（台灣用語）」加進「每次聽寫」，
+#    或把 hex settings get dictation_processing.default_mode 的 JSON 加上 "s2twp" 後
+#    存成 {"dictation_processing.default_mode": {...}}，再執行 hex settings apply <檔案>
 ```
 
 ## 移除
@@ -110,7 +111,10 @@ hex commands check
 ```powershell
 # 只移除繁中轉換
 Remove-Item "$env:USERPROFILE\.config\hex\hex-s2tw.ts","$env:USERPROFILE\.config\hex\hex-data-st.ts","$env:USERPROFILE\.config\hex\hex-data-tw.ts"
-# 再到 settings.json 把 "s2twp" 從步驟移除（先關 Hex）
+# hex.config.ts 還在 import 上面刪掉的檔案，一併刪除後讓 Hex 重建預設的範本
+Remove-Item "$env:USERPROFILE\.config\hex\hex.config.ts"
+hex commands init
+# 再到 Hex 的 Output 窗格把「簡轉繁（台灣用語）」從步驟移除
 
 # 連 Hex 一起移除（用官方安裝腳本的反安裝）
 iwr https://anoma.ly/hex/install-windows.ps1 -OutFile uninstall-hex.ps1

@@ -11,7 +11,14 @@ https://github.com/anomalyco/hex
 
 This repository does **not** redistribute Hex. The installer downloads Hex from
 Anomaly's own release service (`https://anoma.ly/hex/install-windows.ps1`), which
-validates the download's size, SHA-256 and Authenticode signature.
+validates the download's size and SHA-256. `install-windows.ps1` in this repository
+additionally requires a valid Authenticode signature from Anomaly Innovations, Inc.
+
+## Changes in this copy
+
+`install-windows.ps1`, `README.md`, `AGENTS.md` and this file were modified on
+2026-11-23 from commit `055aefb` of mathruffian-dot/hex-zh-hant (installer
+hardening; see the script header). `transformer/*.ts` are unchanged.
 
 ## Transformer and dictionaries
 
